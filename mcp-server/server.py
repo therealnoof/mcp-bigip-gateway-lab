@@ -43,6 +43,8 @@ HR_API_PASS = os.environ.get("HR_API_PASS", "legacy_pass_2024")
 # ─────────────────────────────────────────────────────────────────
 mcp = FastMCP(
     name="hr-tools",
+    host="0.0.0.0",
+    port=int(os.environ.get("MCP_SERVER_PORT", 8080)),
     instructions=(
         "You are connected to the Agency HR System. "
         "Use these tools to look up employee information, "
@@ -173,12 +175,11 @@ async def get_department_roster(department_name: str) -> str:
 # BIG-IP's VIP is the agent-facing endpoint.
 # ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    port = int(os.environ.get("MCP_SERVER_PORT", 8080))
     print(f"╔══════════════════════════════════════════════════╗")
     print(f"║   MCP Server — HR Tools                         ║")
     print(f"║   Transport: SSE (HTTP)                         ║")
-    print(f"║   Port: {port}                                   ║")
+    print(f"║   Port: {os.environ.get('MCP_SERVER_PORT', 8080)}                                   ║")
     print(f"║   Backend: {HR_API_BASE}             ║")
     print(f"║   Tools: 5 (list, get, search, depts, roster)   ║")
     print(f"╚══════════════════════════════════════════════════╝")
-    mcp.run(transport="sse", port=port)
+    mcp.run(transport="sse")
