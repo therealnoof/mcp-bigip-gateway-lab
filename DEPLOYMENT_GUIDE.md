@@ -48,11 +48,61 @@ To use a different model, change the `OLLAMA_MODEL` environment variable in
 | MCP Gateway VIP | 10.1.10.100:443 | — |
 | OAuth AS VIP | 10.1.10.110:443 | — |
 | GPU Server | 10.1.10.60 | 10.1.20.50 |
-| HR App VM | — | 10.1.20.60 |
+| HR App VM | 10.1.10.50 | 10.1.20.60 |
 
 > **GPU Server has two NICs.** The external NIC (10.1.10.60) is where the agent
 > reaches the BIG-IP VIPs. The internal NIC (10.1.20.50) is where BIG-IP pools
 > to the MCP server. Both are required.
+
+### Manual Interface Configuration
+
+In some environments (e.g., AWS EC2 with multiple ENIs), secondary interfaces
+may come up without IP addresses assigned. If `ip addr show` reveals interfaces
+in a `DOWN` state or missing IPv4 addresses, assign them manually.
+
+**GPU Server (10.1.1.5):**
+
+```bash
+# Identify unconfigured interfaces
+ip -br addr show
+
+# Assign external IP to the appropriate interface (e.g., ens7)
+ip addr add 10.1.10.60/24 dev ens7
+ip link set ens7 up
+
+# Assign internal IP (e.g., ens6)
+ip addr add 10.1.20.50/24 dev ens6
+ip link set ens6 up
+```
+
+**HR App VM:**
+
+```bash
+# Identify unconfigured interfaces
+ip -br addr show
+
+# Assign external IP (e.g., ens6)
+ip addr add 10.1.10.50/24 dev ens6
+ip link set ens6 up
+
+# Assign internal IP (e.g., ens7)
+ip addr add 10.1.20.60/24 dev ens7
+ip link set ens7 up
+```
+
+Verify connectivity between the two VMs:
+
+```bash
+# From GPU Server
+ping -c 3 10.1.20.60
+
+# From HR App VM
+ping -c 3 10.1.20.50
+```
+
+> **Note:** These assignments are non-persistent and will be lost on reboot.
+> To make them permanent, configure them in `/etc/netplan/` (Ubuntu) or
+> `/etc/network/interfaces` (Debian).
 
 ---
 
