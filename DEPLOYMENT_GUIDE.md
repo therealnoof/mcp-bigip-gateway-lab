@@ -597,14 +597,21 @@ docker rmi legacy-hr-app
 ### BIG-IP
 
 Remove in reverse order:
-1. Delete Virtual Servers (vs-mcp-gateway, vs-oauth-as)
-2. Delete Access Profiles (ap-mcp-gateway, ap-oauth-as)
-3. Delete Per-Request Policy (prp-mcp-gateway)
-4. Delete OAuth Profile, Client Application, and Scope
-5. Delete Pool (pool-mcp-server)
-6. Delete iRule (irule-mcp-prm)
-7. Delete HTTP Profile (http-mcp-sse)
-8. Delete SSL Profile (clientssl-mcp-lab)
+1. Delete Virtual Servers (`vs-mcp-gateway`, `vs-oauth-as`)
+2. Delete Access Profiles (`ap-mcp-gateway`, `ap-oauth-as`)
+3. Delete Per-Request Policy (`prp-mcp-gateway`)
+4. Delete OAuth Server (`mcp-oauth-rs`)
+5. Delete OAuth Provider (`mcp-oauth-provider`)
+6. Delete OAuth AS Resource Server (`mcp-gateway-rs`)
+7. Delete OAuth AS Client Application (`mcp-agent`)
+8. Delete OAuth AS Profile (`mcp-oauth-as`)
+9. Delete OAuth Scope (`mcp-tools-scope`)
+10. Delete JWT Key (`mcp-jwt-key`)
+11. Delete Local User DB User (`mcp-agent`) and Instance (`mcp-local-db`)
+12. Delete Pool (`pool-mcp-server`)
+13. Delete iRule (`irule-mcp-prm`)
+14. Delete SSE Profile (`mcp-sse`)
+15. Delete SSL Profile (your client SSL profile)
 
 ### Full Cleanup (removes ALL Docker data on the VMs)
 

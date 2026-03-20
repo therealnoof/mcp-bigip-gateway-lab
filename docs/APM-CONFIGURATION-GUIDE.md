@@ -286,23 +286,23 @@ Expected response:
 This VIP handles the actual MCP traffic — SSE connections from the agent to the
 MCP server, with Bearer token validation and credential translation.
 
-### 7.1 Create the SSE HTTP Profile
+### 7.1 Create the SSE Profile
 
-MCP uses Server-Sent Events (SSE) which requires unbuffered streaming responses.
+BIG-IP has a built-in SSE profile for Server-Sent Events streaming.
 
-Navigate to: **Local Traffic → Profiles → Services → HTTP → Create**
+Navigate to: **Local Traffic → Profiles → Services → Server-Sent Events (SSE)**
+
+Create a new profile based on the built-in `sse` parent:
 
 | Setting | Value |
 |---------|-------|
-| Name | `http-mcp-sse` |
-| Parent Profile | `http` |
-| Response Chunking | `Preserve` |
-| OneConnect Transformations | `Disabled` |
+| Name | `mcp-sse` |
+| Parent Profile | `sse` |
 
-> **Critical for SSE:** Without this profile, BIG-IP may buffer SSE responses,
-> causing the agent to hang waiting for MCP tool results. Also remove any
-> response compression profiles from the VIP. If issues persist, disable the
-> OneConnect profile entirely on the VIP.
+> **Why SSE profile?** MCP uses Server-Sent Events for streaming tool results
+> back to the agent. Without an SSE profile, BIG-IP may buffer responses,
+> causing the agent to hang. The built-in SSE profile handles this correctly
+> without needing to manually tweak HTTP chunking and OneConnect settings.
 
 ### 7.2 Create the Pool
 
@@ -316,24 +316,23 @@ Navigate to: **Local Traffic → Pools → Create**
 
 ### 7.3 Create the iRule for Protected Resource Metadata
 
+The MCP spec (RFC 9728) requires a `/.well-known/oauth-protected-resource`
+endpoint that tells agents where to authenticate. This iRule serves that
+metadata directly from BIG-IP without hitting the backend.
+
 Navigate to: **Local Traffic → iRules → Create**
 
-```tcl
-# ──────────────────────────────────────────────────────────
-# iRule: irule-mcp-prm
-# Serves the OAuth Protected Resource Metadata document
-# per RFC 9728, as required by the MCP Authorization spec.
-# ──────────────────────────────────────────────────────────
+| Setting | Value |
+|---------|-------|
+| Name | `irule-mcp-prm` |
 
+Definition:
+
+```tcl
 when HTTP_REQUEST {
     if { [HTTP::uri] eq "/.well-known/oauth-protected-resource" } {
-        set response_body \{
-  "resource": "https://[HTTP::host]/mcp",
-  "authorization_servers": \["https://10.1.10.110"\],
-  "scopes_supported": \["mcp:tools"\],
-  "bearer_methods_supported": \["header"\],
-  "resource_documentation": "https://[HTTP::host]/docs/mcp-api"
-\}
+        set host [HTTP::host]
+        set response_body "{\"resource\": \"https://${host}/mcp\", \"authorization_servers\": \[\"https://10.1.10.110\"\], \"scopes_supported\": \[\"mcp:tools\"\], \"bearer_methods_supported\": \[\"header\"\], \"resource_documentation\": \"https://${host}/docs/mcp-api\"}"
         HTTP::respond 200 content $response_body \
             "Content-Type" "application/json" \
             "Access-Control-Allow-Origin" "*" \
@@ -343,7 +342,68 @@ when HTTP_REQUEST {
 }
 ```
 
-### 7.4 Per-Request Policy for Token Validation
+> **TCL escaping:** The JSON must be on a single line inside double quotes with
+> escaped inner quotes (`\"`). Multi-line JSON strings cause TCL parsing errors
+> because braces and brackets are interpreted as TCL syntax.
+
+### 7.4 Register a Resource Server in the OAuth AS
+
+The MCP Gateway VIP acts as an OAuth Resource Server — it needs credentials
+to call the OAuth AS introspection endpoint to validate tokens.
+
+#### 7.4.1 Create the Resource Server
+
+Navigate to: **Access → Federation → OAuth Authorization Server → Resource Server**
+
+| Setting | Value |
+|---------|-------|
+| Name | `mcp-gateway-rs` |
+| Authentication Type | `Secret` |
+
+Save and note the **auto-generated Resource Server ID and Secret**.
+
+Then edit the OAuth AS Profile (`mcp-oauth-as`) and add `mcp-gateway-rs` to the
+**Resource Server** selection.
+
+#### 7.4.2 Create an OAuth Provider
+
+The resource server needs to know where the OAuth AS endpoints are.
+
+Navigate to: **Access → Federation → OAuth Client/Resource Server → OAuth Provider**
+
+| Setting | Value |
+|---------|-------|
+| Name | `mcp-oauth-provider` |
+| Type | `F5` |
+| Ignore Expired Certificate Validation | Checked (self-signed cert in lab) |
+| Authentication URI | `https://10.1.10.110/f5-oauth2/v1/authorize` |
+| Token URI | `https://10.1.10.110/f5-oauth2/v1/token` |
+| Token Validation Scope URI | `https://10.1.10.110/f5-oauth2/v1/introspect` |
+| Support Introspection | Checked |
+| UserInfo Request URI | `https://10.1.10.110/f5-oauth2/v1/userinfo` |
+| Use Auto JWT | Unchecked (we use opaque tokens) |
+
+#### 7.4.3 Create an OAuth Server (Resource Server Config)
+
+Navigate to: **Access → Federation → OAuth Client/Resource Server → OAuth Server**
+
+| Setting | Value |
+|---------|-------|
+| Name | `mcp-oauth-rs` |
+| Mode | `Resource Server` |
+| Type | `F5` |
+| OAuth Provider | `mcp-oauth-provider` |
+| DNS Resolver | Select or create a DNS resolver (see note below) |
+| Client ServerSSL Profile Name | `serverssl` (default) |
+| Resource Server ID | (paste the auto-generated ID from Step 7.4.1) |
+| Resource Server Secret | (paste the auto-generated secret from Step 7.4.1) |
+
+> **DNS Resolver:** If none exists, create one at Network → DNS Resolvers →
+> DNS Resolver List. Add your environment's DNS server IP as a forward zone.
+> This is needed for the resource server to resolve the OAuth AS hostname
+> during introspection calls.
+
+### 7.5 Per-Request Policy for Token Validation
 
 Navigate to: **Access → Profiles/Policies → Per-Request Policies → Create**
 
@@ -354,52 +414,36 @@ Name: `prp-mcp-gateway`
 ```
 Start
   │
-  ├─► [URL Branch] ─── Path starts with /.well-known/ ──► Allow (metadata)
-  │
-  └─► [OAuth Scope Check] ─── Validate Bearer Token
+  └─► [OAuth Scope] ─── Validate Bearer Token via Introspection
         │
-        ├─► Token Valid + scope "mcp:tools" present
-        │     │
-        │     └─► [Variable Assign] ─── Set Basic Auth credentials
-        │           │
-        │           └─► [HTTP Headers] ─── Inject Authorization: Basic header
-        │                 │
-        │                 └─► Allow (proxy to MCP server)
+        ├─► Successful (scope mcp:tools present) ──► Allow
         │
-        └─► Token Invalid / Missing
-              │
-              └─► Reject (401)
+        └─► Fallback (token invalid/missing) ──► Reject
 ```
 
-**Variable Assign — Credential Translation:**
+**OAuth Scope agent configuration:**
 
-This is the key action that converts the OAuth Bearer token into Basic Auth
-credentials for the legacy HR app.
+| Setting | Value |
+|---------|-------|
+| Token Validation Mode | `External` (validates opaque tokens via introspection) |
+| Server | `mcp-oauth-rs` |
+| Scopes Request | `F5ScopesRequest` (pre-built request template) |
 
-Custom Variable:
-```
-Name:  perflow.basic_auth_header
-Value: (custom expression)
-```
+> **Internal vs External validation:**
+> - **Internal** = local JWT validation (requires JWT Provider List for signature verification)
+> - **External** = opaque token introspection (calls back to OAuth AS to validate)
+>
+> Since this lab uses opaque tokens, select External. The `F5ScopesRequest`
+> template sends the access token to the introspection endpoint with the
+> resource server credentials configured in `mcp-oauth-rs`.
 
-TCL Expression:
-```tcl
-set username "hr_service"
-set password "legacy_pass_2024"
-set credentials [b64encode "${username}:${password}"]
-return "Basic ${credentials}"
-```
+Set branches:
+- **Successful** → **Allow**
+- **Fallback** → **Reject**
 
-**HTTP Headers Modify:**
+Click **Apply Access Policy**.
 
-| Action | Header Name | Value |
-|--------|-------------|-------|
-| Replace | `Authorization` | `%{perflow.basic_auth_header}` |
-
-This strips the incoming Bearer token and replaces it with Basic Auth
-before the request hits the backend MCP server.
-
-### 7.5 Access Profile for MCP Gateway
+### 7.6 Access Profile for MCP Gateway
 
 Navigate to: **Access → Profiles/Policies → Access Profiles → Create**
 
@@ -409,10 +453,13 @@ Navigate to: **Access → Profiles/Policies → Access Profiles → Create**
 | Profile Type | `All` or `LTM-APM` |
 | Languages | `English` |
 
-The per-session policy for this profile can be simple — just `Start → Allow`.
-The actual token validation happens in the per-request policy.
+Edit the per-session policy and set it to: `Start → Allow`.
 
-### 7.6 Virtual Server
+The per-session policy does no authentication — token validation happens
+entirely in the per-request policy (`prp-mcp-gateway`). The per-session policy
+just establishes the APM session so the per-request policy can run.
+
+### 7.7 Virtual Server
 
 Navigate to: **Local Traffic → Virtual Servers → Create**
 
@@ -421,8 +468,9 @@ Navigate to: **Local Traffic → Virtual Servers → Create**
 | Name | `vs-mcp-gateway` |
 | Destination Address | `10.1.10.100` |
 | Service Port | `443` |
-| HTTP Profile (Client) | `http-mcp-sse` |
+| HTTP Profile (Client) | `http` |
 | SSL Profile (Client) | Select your self-signed client SSL profile |
+| SSE Profile | `mcp-sse` |
 | Source Address Translation | `Auto Map` |
 | Default Pool | `pool-mcp-server` |
 | Access Profile | `ap-mcp-gateway` |
