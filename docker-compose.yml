@@ -17,30 +17,13 @@
 
 services:
   # ───────────────────────────────────────────────────────────
-  # LEGACY HR APP
-  # The "old" application that only speaks Basic Auth.
-  # This is what BIG-IP APM protects and translates auth for.
-  # ───────────────────────────────────────────────────────────
-  legacy-hr-app:
-    build: ./legacy-hr-app
-    container_name: legacy-hr-app
-    ports:
-      - "5001:5001"
-    environment:
-      - HR_API_USER=hr_service
-      - HR_API_PASS=legacy_pass_2024
-      - HR_API_PORT=5001
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/health')"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  # ───────────────────────────────────────────────────────────
   # MCP SERVER
   # Wraps the legacy HR API as MCP tools.
   # In production, this sits behind BIG-IP APM.
   # For testing, the agent connects directly on port 8080.
+  #
+  # NOTE: The Legacy HR App runs on a separate VM (10.1.20.60).
+  # See the Deployment Guide for HR App VM setup instructions.
   # ───────────────────────────────────────────────────────────
   mcp-server:
     build: ./mcp-server
@@ -48,13 +31,16 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - HR_API_BASE=http://legacy-hr-app:5001
+      - HR_API_BASE=http://10.1.20.60:5001
       - HR_API_USER=hr_service
       - HR_API_PASS=legacy_pass_2024
       - MCP_SERVER_PORT=8080
-    depends_on:
-      legacy-hr-app:
-        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/sse')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # ───────────────────────────────────────────────────────────
   # OLLAMA — Local LLM Server
@@ -68,14 +54,13 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    # Uncomment the next 2 lines if you have a NVIDIA GPU:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   # Sidecar that pulls the model on first startup
   model-puller:
@@ -113,8 +98,10 @@ services:
       # - BIGIP_CLIENT_SECRET=agent-secret-2024
       # - MCP_SERVER_URL=https://bigip.lab.local/mcp/sse
     depends_on:
-      - mcp-server
-      - ollama
+      mcp-server:
+        condition: service_healthy
+      ollama:
+        condition: service_started
 
 volumes:
   ollama_data:
