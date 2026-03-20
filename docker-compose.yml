@@ -1,0 +1,120 @@
+# ═══════════════════════════════════════════════════════════════
+# BIG-IP APM as MCP Gateway — Demo Environment
+# ═══════════════════════════════════════════════════════════════
+#
+# Architecture:
+#   Agent → (OAuth 2.1) → BIG-IP APM → (Basic Auth) → MCP Server → Legacy HR API
+#
+# For standalone testing (no BIG-IP):
+#   Agent → MCP Server → Legacy HR API
+#
+# Usage:
+#   docker compose up -d                # Start all services
+#   docker compose run --rm agent python agent.py test   # Test tools
+#   docker compose run --rm agent python agent.py "Who has TS/SCI clearance?"
+#
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ───────────────────────────────────────────────────────────
+  # LEGACY HR APP
+  # The "old" application that only speaks Basic Auth.
+  # This is what BIG-IP APM protects and translates auth for.
+  # ───────────────────────────────────────────────────────────
+  legacy-hr-app:
+    build: ./legacy-hr-app
+    container_name: legacy-hr-app
+    ports:
+      - "5001:5001"
+    environment:
+      - HR_API_USER=hr_service
+      - HR_API_PASS=legacy_pass_2024
+      - HR_API_PORT=5001
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ───────────────────────────────────────────────────────────
+  # MCP SERVER
+  # Wraps the legacy HR API as MCP tools.
+  # In production, this sits behind BIG-IP APM.
+  # For testing, the agent connects directly on port 8080.
+  # ───────────────────────────────────────────────────────────
+  mcp-server:
+    build: ./mcp-server
+    container_name: mcp-server
+    ports:
+      - "8080:8080"
+    environment:
+      - HR_API_BASE=http://legacy-hr-app:5001
+      - HR_API_USER=hr_service
+      - HR_API_PASS=legacy_pass_2024
+      - MCP_SERVER_PORT=8080
+    depends_on:
+      legacy-hr-app:
+        condition: service_healthy
+
+  # ───────────────────────────────────────────────────────────
+  # OLLAMA — Local LLM Server
+  # Runs the LLM that powers the agent's reasoning.
+  # The model-puller sidecar downloads the model on first run.
+  # ───────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    # Uncomment the next 2 lines if you have a NVIDIA GPU:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # Sidecar that pulls the model on first startup
+  model-puller:
+    image: ollama/ollama:latest
+    container_name: model-puller
+    depends_on:
+      - ollama
+    entrypoint: >
+      sh -c "
+        echo 'Waiting for Ollama to start...' &&
+        sleep 10 &&
+        ollama pull llama3.1:8b &&
+        echo 'Model pull complete!'
+      "
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+
+  # ───────────────────────────────────────────────────────────
+  # AI AGENT
+  # The MCP client that queries the HR system.
+  # Container stays running so you can exec commands into it.
+  # ───────────────────────────────────────────────────────────
+  agent:
+    build: ./agent
+    container_name: agent
+    environment:
+      - MCP_SERVER_URL=http://mcp-server:8080/sse
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3.1:8b
+      - AUTH_MODE=direct
+      # ── BIG-IP OAuth settings (uncomment when APM is ready) ──
+      # - AUTH_MODE=bigip
+      # - BIGIP_TOKEN_URL=https://bigip.lab.local/f5-oauth2/v1/token
+      # - BIGIP_CLIENT_ID=mcp-agent
+      # - BIGIP_CLIENT_SECRET=agent-secret-2024
+      # - MCP_SERVER_URL=https://bigip.lab.local/mcp/sse
+    depends_on:
+      - mcp-server
+      - ollama
+
+volumes:
+  ollama_data:

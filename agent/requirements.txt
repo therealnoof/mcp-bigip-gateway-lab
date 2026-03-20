@@ -1,0 +1,6 @@
+# MCP SDK — client side for connecting to MCP server
+mcp[cli]>=1.0.0
+# Ollama client — talks to the local LLM
+ollama>=0.3.0
+# Async HTTP client — used for OAuth token requests in BIG-IP mode
+httpx>=0.27.0

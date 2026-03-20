@@ -1,0 +1,6 @@
+# MCP SDK with CLI tools — provides FastMCP and SSE transport
+mcp[cli]>=1.0.0
+# Async HTTP client for calling the legacy HR API
+httpx>=0.27.0
+# ASGI server — FastMCP uses this to serve the SSE transport
+uvicorn>=0.30.0
