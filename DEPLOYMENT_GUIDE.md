@@ -275,24 +275,35 @@ curl -u wrong:creds http://localhost:5001/api/employees
 
 ## Step 7: Deploy the GPU Server Stack (GPU Server — 10.1.10.60 / 10.1.20.50)
 
+> **Note:** The GPU Server compose file runs the MCP Server, Ollama, and Agent
+> only. The Legacy HR App runs separately on the HR App VM (Step 6). The MCP
+> Server connects to the HR App over the internal network (10.1.20.60:5001).
+
 ```bash
 # Clone the repo
 git clone https://github.com/therealnoof/mcp-bigip-gateway-lab.git
 cd mcp-bigip-gateway-lab
 
-# Start all services
-docker compose up -d
+# Build and start services
+docker compose up -d --build
 
 # Watch the model download (~4.7GB, takes 2-5 min)
 docker compose logs -f model-puller
 # Wait for: "Model pull complete!"
 ```
 
-Verify connectivity to the HR App from the GPU Server:
+> **GPU passthrough** is enabled by default in `docker-compose.yml`. If you do
+> NOT have an NVIDIA GPU, comment out the `deploy.resources` section under the
+> `ollama` service or `docker compose up` will fail.
+
+Verify the HR App is reachable from the GPU Server before proceeding:
 
 ```bash
 curl -u hr_service:legacy_pass_2024 http://10.1.20.60:5001/api/health | jq .
 ```
+
+If this fails, check that the internal interface (10.1.20.50) is configured
+on the GPU Server — see [Manual Interface Configuration](#manual-interface-configuration) above.
 
 ---
 
@@ -467,8 +478,8 @@ fixed in the current codebase but documented here for troubleshooting.
 **Problem:** Calling `mcp.run(host="0.0.0.0", port=8080)` fails on some MCP SDK
 versions that expect `host` and `port` as `FastMCP()` constructor arguments.
 
-**Fix:** The current `server.py` passes `transport="sse"` and `port=8080` to
-`mcp.run()`. If you hit this, move them to the constructor:
+**Fix (already applied):** The current `server.py` passes `host` and `port` to
+the `FastMCP()` constructor, and only `transport="sse"` to `mcp.run()`:
 ```python
 mcp = FastMCP(name="hr-tools", host="0.0.0.0", port=8080)
 mcp.run(transport="sse")
