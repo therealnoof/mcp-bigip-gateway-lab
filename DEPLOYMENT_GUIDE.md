@@ -54,43 +54,59 @@ To use a different model, change the `OLLAMA_MODEL` environment variable in
 > reaches the BIG-IP VIPs. The internal NIC (10.1.20.50) is where BIG-IP pools
 > to the MCP server. Both are required.
 
-### Manual Interface Configuration
+### Persistent Interface Configuration (Netplan)
 
-In some environments (e.g., AWS EC2 with multiple ENIs), secondary interfaces
-may come up without IP addresses assigned. If `ip addr show` reveals interfaces
-in a `DOWN` state or missing IPv4 addresses, assign them manually.
+In AWS EC2 with multiple ENIs, secondary interfaces come up without IP addresses.
+These must be configured persistently so they survive reboots.
+
+> **Important:** Verify your interface names before applying. Run `ip -br link show`
+> on each VM to confirm which interfaces are `ens6` and `ens7`. Adjust the netplan
+> files if your interface names differ.
 
 **GPU Server (10.1.1.5):**
 
 ```bash
-# Identify unconfigured interfaces
-ip -br addr show
+# Clone the repo if not already done
+cd /mcp-bigip-gateway-lab
 
-# Assign external IP to the appropriate interface (e.g., ens7)
-ip addr add 10.1.10.60/24 dev ens7
-ip link set ens7 up
+# Copy the netplan config
+sudo cp docs/netplan-gpu-server.yaml /etc/netplan/60-lab-interfaces.yaml
 
-# Assign internal IP (e.g., ens6)
-ip addr add 10.1.20.50/24 dev ens6
-ip link set ens6 up
+# Apply (brings interfaces up immediately and persists across reboots)
+sudo netplan apply
+
+# Verify
+ip -br addr show ens6 ens7
+```
+
+Expected output:
+```
+ens6     UP    10.1.20.50/24
+ens7     UP    10.1.10.60/24
 ```
 
 **HR App VM:**
 
 ```bash
-# Identify unconfigured interfaces
-ip -br addr show
+cd /mcp-bigip-gateway-lab
 
-# Assign external IP (e.g., ens6)
-ip addr add 10.1.10.50/24 dev ens6
-ip link set ens6 up
+# Copy the netplan config
+sudo cp docs/netplan-hr-app.yaml /etc/netplan/60-lab-interfaces.yaml
 
-# Assign internal IP (e.g., ens7)
-ip addr add 10.1.20.60/24 dev ens7
-ip link set ens7 up
+# Apply
+sudo netplan apply
+
+# Verify
+ip -br addr show ens6 ens7
 ```
 
-Verify connectivity between the two VMs:
+Expected output:
+```
+ens6     UP    10.1.10.50/24
+ens7     UP    10.1.20.60/24
+```
+
+**Verify connectivity between the two VMs:**
 
 ```bash
 # From GPU Server
@@ -100,9 +116,8 @@ ping -c 3 10.1.20.60
 ping -c 3 10.1.20.50
 ```
 
-> **Note:** These assignments are non-persistent and will be lost on reboot.
-> To make them permanent, configure them in `/etc/netplan/` (Ubuntu) or
-> `/etc/network/interfaces` (Debian).
+> **Netplan files** are included in the repo under `docs/`. If your interface names
+> differ, edit the yaml file before copying it to `/etc/netplan/`.
 
 ---
 

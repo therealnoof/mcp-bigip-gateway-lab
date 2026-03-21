@@ -1,0 +1,20 @@
+# Netplan configuration for HR App VM secondary interfaces
+# Copy to /etc/netplan/60-lab-interfaces.yaml on the HR App VM
+#
+# IMPORTANT: Verify interface names match your environment before applying.
+# Run 'ip -br link show' to list interfaces and their MAC addresses.
+# Adjust ens6/ens7 below if your interface names differ.
+#
+# Apply with: sudo netplan apply
+
+network:
+  version: 2
+  ethernets:
+    ens6:
+      addresses:
+        - 10.1.10.50/24
+      # External network
+    ens7:
+      addresses:
+        - 10.1.20.60/24
+      # Internal network — HR App listens here
