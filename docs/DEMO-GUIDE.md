@@ -50,6 +50,8 @@ BIG-IP APM handles all the modern authentication on behalf of the agent.
 
 ## Architecture
 
+![Lab Environment](environment-image.png)
+
 ### Network Topology
 
 ```
@@ -516,6 +518,62 @@ docker start legacy-hr-app
 # Rebuild agent after code changes
 docker compose up -d --build agent
 ```
+
+---
+
+## Lab vs Production Architecture
+
+This lab simplifies the architecture for demo purposes. In a production
+deployment, the security model would be tighter.
+
+### What the Lab Does
+
+```
+Agent (Bearer token) → BIG-IP APM (validates token) → MCP Server → HR App
+                                                        ↑
+                                                  MCP Server holds its own
+                                                  HR App credentials (env vars)
+```
+
+- The MCP server has `HR_API_USER` and `HR_API_PASS` hardcoded in its environment
+- The MCP server calls the HR App with Basic Auth on its own
+- BIG-IP validates the agent's OAuth token but does not inject credentials
+- The MCP server accepts unauthenticated connections — anyone on the internal
+  network could bypass BIG-IP and connect to it directly on port 8080
+
+### What Production Would Do
+
+```
+Agent (Bearer token) → BIG-IP APM (validates token, injects Basic Auth) → MCP Server (requires Basic Auth) → HR App
+```
+
+- BIG-IP APM performs **credential translation** in the per-request policy:
+  a Variable Assign action base64-encodes the service account credentials,
+  then an HTTP Headers Modify action injects the `Authorization: Basic` header
+- The MCP server **requires** authentication — it rejects any request without
+  a valid Authorization header
+- The MCP server does **not** hold credentials — it passes through whatever
+  BIG-IP injects to the HR App
+- The agent **cannot** bypass BIG-IP — it doesn't have the MCP server
+  credentials, and the MCP server rejects unauthenticated connections
+- BIG-IP is the **single enforcement point** — token validation + credential
+  injection + audit logging
+
+### Additional Production Considerations
+
+- **External IdP** — Replace the local BIG-IP OAuth AS with Azure AD, Okta,
+  or Ping Identity. Use `client_credentials` grant (which external IdPs
+  support natively) instead of the ROPC workaround. BIG-IP becomes the
+  resource server only.
+- **Mutual TLS** — Add mTLS between BIG-IP and the MCP server so the MCP
+  server only accepts connections from BIG-IP's client certificate.
+- **Network segmentation** — Place the MCP server on a restricted VLAN that
+  only BIG-IP can reach. No direct agent-to-MCP-server path exists.
+- **Rate limiting** — APM can enforce rate limits per client, preventing
+  a compromised agent from flooding the HR system with requests.
+- **Scope-based access control** — Map different OAuth scopes to different
+  tool subsets. An agent with `mcp:tools:read` can query but not modify;
+  an agent with `mcp:tools:admin` gets full access.
 
 ---
 
