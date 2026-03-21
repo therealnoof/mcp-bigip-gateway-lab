@@ -101,7 +101,7 @@ async def run_agent(user_query: str):
     # In production, mount the CA cert and use verify="/path/to/ca.pem".
     sse_kwargs = {}
     if AUTH_MODE == "bigip":
-        sse_kwargs["httpx_client_factory"] = lambda: httpx.AsyncClient(verify=False)
+        sse_kwargs["httpx_client_factory"] = lambda **kwargs: httpx.AsyncClient(verify=False, **kwargs)
 
     async with sse_client(MCP_SERVER_URL, headers=headers, **sse_kwargs) as (read, write):
         async with ClientSession(read, write) as session:
