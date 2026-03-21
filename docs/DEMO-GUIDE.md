@@ -255,6 +255,10 @@ Run these **before every demo** to ensure all components are healthy.
 ### From the GPU Server (10.1.1.5)
 
 ```bash
+echo "=== 0. Start Services ==="
+cd /mcp-bigip-gateway-lab && docker compose up -d
+
+echo ""
 echo "=== 1. Network Interfaces ==="
 ip -br addr show ens6
 ip -br addr show ens7
