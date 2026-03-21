@@ -330,6 +330,11 @@ Definition:
 
 ```tcl
 when HTTP_REQUEST {
+    # Enable Clientless Mode for non-interactive API/agent clients
+    # Without this, APM redirects to /my.policy for session setup,
+    # which curl/API clients cannot handle (see F5 K000137617)
+    HTTP::header insert "clientless-mode" 1
+
     if { [HTTP::uri] eq "/.well-known/oauth-protected-resource" } {
         set host [HTTP::host]
         set response_body "{\"resource\": \"https://${host}/mcp\", \"authorization_servers\": \[\"https://10.1.10.110\"\], \"scopes_supported\": \[\"mcp:tools\"\], \"bearer_methods_supported\": \[\"header\"\], \"resource_documentation\": \"https://${host}/docs/mcp-api\"}"
@@ -341,6 +346,12 @@ when HTTP_REQUEST {
     }
 }
 ```
+
+> **Clientless Mode (Critical):** The `clientless-mode` header is required for
+> any non-interactive client (API calls, AI agents, curl). Without it, APM
+> issues a 302 redirect to `/my.policy` for interactive session setup, which
+> API clients cannot follow. This is documented in
+> [F5 K000137617](https://my.f5.com/manage/s/article/K000137617).
 
 > **TCL escaping:** The JSON must be on a single line inside double quotes with
 > escaped inner quotes (`\"`). Multi-line JSON strings cause TCL parsing errors
@@ -554,11 +565,24 @@ When working end-to-end, the flow is:
 
 ## Troubleshooting
 
-### Token request returns 302 redirect to /my.policy
+### Token request returns 302 redirect to /my.policy (OAuth AS VIP)
 
 The OAuth Profile is not linked to the Access Profile. Edit the access profile
 properties (not the visual policy editor) and ensure the OAuth Profile field
 is set to `mcp-oauth-as`.
+
+### MCP Gateway returns 302 redirect to /my.policy
+
+APM redirects non-interactive clients (API calls, AI agents, curl) to
+`/my.policy` for interactive session setup. These clients cannot handle the
+redirect or render the logon page.
+
+**Fix:** Add `HTTP::header insert "clientless-mode" 1` to the iRule attached
+to the MCP Gateway VIP. This tells APM to bypass interactive session elements
+and work in non-interactive mode. See [F5 K000137617](https://my.f5.com/manage/s/article/K000137617).
+
+This is a **required** configuration for any VIP serving API/machine-to-machine
+traffic through APM.
 
 ### Token request returns "Unsupported value for field (grant_type)"
 
