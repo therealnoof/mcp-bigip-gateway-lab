@@ -563,10 +563,13 @@ Agent (Bearer token) → BIG-IP APM (validates token, injects Basic Auth) → MC
 
 ### Additional Production Considerations
 
-- **External IdP** — Replace the local BIG-IP OAuth AS with Azure AD, Okta,
-  or Ping Identity. Use `client_credentials` grant (which external IdPs
-  support natively) instead of the ROPC workaround. BIG-IP becomes the
-  resource server only.
+- **BIG-IP 21.1 (Spring 2026)** — Adds native `client_credentials` grant and
+  OAuth 2.1 support. This eliminates the ROPC workaround entirely — no local
+  users, no OAuth Logon Page, no fallback branch quirk. The lab architecture
+  stays the same, just simpler policy and proper OAuth 2.1 compliance.
+- **External IdP (available today)** — Replace the local BIG-IP OAuth AS with
+  Azure AD, Okta, or Ping Identity. Use `client_credentials` grant (which
+  external IdPs support natively). BIG-IP becomes the resource server only.
 - **Mutual TLS** — Add mTLS between BIG-IP and the MCP server so the MCP
   server only accepts connections from BIG-IP's client certificate.
 - **Network segmentation** — Place the MCP server on a restricted VLAN that
@@ -588,4 +591,4 @@ Agent (Bearer token) → BIG-IP APM (validates token, injects Basic Auth) → MC
 | **Single pane of control** | APM logs every token issued, every tool called, every session created. |
 | **Protocol translation** | APM has done SAML-to-Kerberos for 15 years. OAuth-to-Basic for AI agents is the same pattern. |
 | **Zero Trust for AI** | Scoped tokens, time-limited access, per-request validation. No hardcoded credentials in the agent. |
-| **Production path** | Swap the local OAuth AS for Azure AD/Okta. BIG-IP becomes the resource server. Same architecture, enterprise IdP. |
+| **Production path** | BIG-IP 21.1 (Spring 2026) adds native `client_credentials` + OAuth 2.1 — eliminates the ROPC workaround. Or use Azure AD/Okta as the IdP today. |

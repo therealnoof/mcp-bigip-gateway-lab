@@ -211,11 +211,11 @@ async def get_oauth_token() -> str:
     """
     Obtain an OAuth access token from BIG-IP APM.
     Uses the Resource Owner Password Credentials (ROPC) grant because
-    BIG-IP APM does not support client_credentials natively.
+    BIG-IP APM 17.1 does not support client_credentials natively.
 
-    In production, use an external IdP (Azure AD, Okta) that supports
-    client_credentials for machine-to-machine auth, with BIG-IP as the
-    resource server validating those tokens.
+    BIG-IP 21.1 (Spring 2026) adds client_credentials + OAuth 2.1.
+    Alternatively, use an external IdP (Azure AD, Okta) that supports
+    client_credentials today, with BIG-IP as the resource server.
     """
     import httpx
 

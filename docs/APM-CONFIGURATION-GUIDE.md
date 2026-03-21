@@ -17,17 +17,32 @@ The OAuth AS and MCP Gateway run on **separate Virtual Servers**:
 
 ---
 
-## Important: OAuth Grant Type Limitations
+## Important: OAuth Grant Type and Version
 
-BIG-IP APM does **not** natively support the `client_credentials` OAuth grant type.
-APM supports three grant types:
+### Current Limitation (BIG-IP 17.1)
+
+BIG-IP APM 17.1 uses **OAuth 2.0** and does **not** support the
+`client_credentials` grant type or OAuth 2.1. APM 17.1 supports three grant types:
 - **Authorization Code / Hybrid**
 - **Implicit**
 - **Resource Owner Password Credentials (ROPC)**
 
 For this lab (machine-to-machine, no human user), we use **ROPC** as a workaround.
 This requires creating a local user on BIG-IP for the agent to authenticate with,
-even though there's no real human involved.
+even though there's no real human involved. ROPC is deprecated in OAuth 2.1.
+
+### BIG-IP 21.1 (Spring 2026)
+
+BIG-IP version **21.1** (expected April/May 2026) will add native support for:
+- **`client_credentials` grant type** — the correct OAuth flow for
+  machine-to-machine auth (AI agents, service accounts, automation)
+- **OAuth 2.1** — the modern standard mandated by the MCP specification
+
+When 21.1 is available, this lab can be simplified by:
+1. Removing the ROPC workaround (no local user needed)
+2. Removing the OAuth Logon Page and LocalDB Auth from the access policy
+3. Using `grant_type=client_credentials` in the agent's token request
+4. Aligning fully with the MCP spec's OAuth 2.1 requirement
 
 ### Access Token vs JWT
 
@@ -44,8 +59,15 @@ the JWKS endpoint for local validation on the MCP Gateway VIP.
 
 ### Production Recommendation
 
-In production, you would **not** use this pattern. Instead:
+Two paths to production, depending on timeline:
 
+**Option A — BIG-IP 21.1+ (Spring 2026 onwards):**
+1. Upgrade to BIG-IP 21.1 which adds native `client_credentials` and OAuth 2.1
+2. BIG-IP APM acts as both OAuth AS and MCP Gateway (same as this lab, but cleaner)
+3. No ROPC workaround, no local users — full OAuth 2.1 compliance
+4. Fully aligned with the MCP specification
+
+**Option B — BIG-IP 17.x with external IdP:**
 1. Use an **external Identity Provider** (Azure AD, Okta, Ping Identity) that
    natively supports `client_credentials` grant for machine-to-machine auth
 2. BIG-IP APM acts as the **Resource Server only** — validating tokens issued
@@ -53,7 +75,7 @@ In production, you would **not** use this pattern. Instead:
 3. No local users on BIG-IP, no ROPC workaround needed
 4. The per-request policy validates the external JWT using the IdP's JWKS endpoint
 
-This lab uses BIG-IP as both OAuth AS and gateway to keep the environment
+This lab uses BIG-IP 17.1 as both OAuth AS and gateway to keep the environment
 self-contained with no external dependencies.
 
 ---
