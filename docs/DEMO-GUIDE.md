@@ -256,7 +256,8 @@ Run these **before every demo** to ensure all components are healthy.
 
 ```bash
 echo "=== 1. Network Interfaces ==="
-ip -br addr show ens6 ens7
+ip -br addr show ens6
+ip -br addr show ens7
 
 echo ""
 echo "=== 2. HR App Reachable ==="
@@ -473,7 +474,8 @@ curl -u hr_service:legacy_pass_2024 http://10.1.20.60:5001/api/health
 
 If unreachable, check interfaces:
 ```bash
-ip -br addr show ens6 ens7
+ip -br addr show ens6
+ip -br addr show ens7
 sudo systemctl restart lab-interfaces
 ```
 
