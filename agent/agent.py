@@ -31,6 +31,7 @@ import json
 import os
 import sys
 
+import httpx
 import ollama
 from mcp import ClientSession
 from mcp.client.sse import sse_client
@@ -96,7 +97,13 @@ async def run_agent(user_query: str):
 
     print(f"[MCP] Connecting to {MCP_SERVER_URL}...")
 
-    async with sse_client(MCP_SERVER_URL, headers=headers) as (read, write):
+    # For BIG-IP mode with self-signed certs, disable SSL verification.
+    # In production, mount the CA cert and use verify="/path/to/ca.pem".
+    sse_kwargs = {}
+    if AUTH_MODE == "bigip":
+        sse_kwargs["httpx_client_factory"] = lambda: httpx.AsyncClient(verify=False)
+
+    async with sse_client(MCP_SERVER_URL, headers=headers, **sse_kwargs) as (read, write):
         async with ClientSession(read, write) as session:
             # Initialize the MCP session — this triggers tool discovery
             await session.initialize()
