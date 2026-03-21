@@ -74,7 +74,7 @@ services:
       sh -c "
         echo 'Waiting for Ollama to start...' &&
         sleep 10 &&
-        ollama pull llama3.1:8b &&
+        ollama pull llama3.2:3b &&
         echo 'Model pull complete!'
       "
     environment:
@@ -91,7 +91,7 @@ services:
     environment:
       - MCP_SERVER_URL=http://mcp-server:8080/sse
       - OLLAMA_HOST=http://ollama:11434
-      - OLLAMA_MODEL=llama3.1:8b
+      - OLLAMA_MODEL=llama3.2:3b
       - AUTH_MODE=direct
       # ── BIG-IP OAuth settings (uncomment when APM is ready) ──
       # - AUTH_MODE=bigip
