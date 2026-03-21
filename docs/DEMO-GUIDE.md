@@ -257,6 +257,8 @@ Run these **before every demo** to ensure all components are healthy.
 ```bash
 echo "=== 0. Start Services ==="
 cd /mcp-bigip-gateway-lab && docker compose up -d
+echo "Waiting 2 minutes for Ollama to load model into GPU..."
+sleep 120
 
 echo ""
 echo "=== 1. Network Interfaces ==="
@@ -453,6 +455,16 @@ If `load_tensors` is timing out, restart Ollama:
 ```bash
 docker compose restart ollama
 ```
+
+### First run after boot fails with "Error in post_writer" / urlfilter_blocked
+
+The first agent query after a reboot may fail with a 302 redirect to
+`urlfilter_blocked.php3`. This is a timing issue — the APM session isn't
+fully established when the MCP client sends its first POST request.
+
+**Fix:** Simply re-run the same command. The second run will use the
+established session and work normally. This only affects the very first
+request after services start.
 
 ### Agent fails with "Failed to obtain OAuth token"
 
