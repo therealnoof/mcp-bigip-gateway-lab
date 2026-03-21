@@ -48,7 +48,7 @@ services:
   # The model-puller sidecar downloads the model on first run.
   # ───────────────────────────────────────────────────────────
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.6.2
     container_name: ollama
     ports:
       - "11434:11434"
@@ -64,7 +64,7 @@ services:
 
   # Sidecar that pulls the model on first startup
   model-puller:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.6.2
     container_name: model-puller
     depends_on:
       - ollama
