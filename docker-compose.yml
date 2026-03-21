@@ -89,16 +89,20 @@ services:
     build: ./agent
     container_name: agent
     environment:
-      - MCP_SERVER_URL=http://mcp-server:8080/sse
       - OLLAMA_HOST=http://ollama:11434
       - OLLAMA_MODEL=llama3.2:3b
-      - AUTH_MODE=direct
-      # ── BIG-IP OAuth settings (uncomment when APM is ready) ──
-      # - AUTH_MODE=bigip
-      # - BIGIP_TOKEN_URL=https://bigip.lab.local/f5-oauth2/v1/token
-      # - BIGIP_CLIENT_ID=mcp-agent
-      # - BIGIP_CLIENT_SECRET=agent-secret-2024
-      # - MCP_SERVER_URL=https://bigip.lab.local/mcp/sse
+      # ── Direct mode (no BIG-IP) ──
+      # - AUTH_MODE=direct
+      # - MCP_SERVER_URL=http://mcp-server:8080/sse
+      # ── BIG-IP OAuth mode (ROPC) ──
+      - AUTH_MODE=bigip
+      - MCP_SERVER_URL=https://10.1.10.100/sse
+      - BIGIP_TOKEN_URL=https://10.1.10.110/f5-oauth2/v1/token
+      - BIGIP_CLIENT_ID=6c347e3dc69a6bd28477f4f1d8200ac620f091f1b4b7bd69
+      - BIGIP_CLIENT_SECRET=107c0886f3835ed41978c954f766f72681c959ccb69e0ac620f091f1b4b7bd69
+      - BIGIP_GRANT_TYPE=password
+      - BIGIP_USERNAME=mcp-agent
+      - BIGIP_PASSWORD=AgentPass2024!
     depends_on:
       mcp-server:
         condition: service_healthy

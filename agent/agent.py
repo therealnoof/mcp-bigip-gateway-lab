@@ -202,31 +202,42 @@ async def run_agent(user_query: str):
 
 async def get_oauth_token() -> str:
     """
-    Obtain an OAuth 2.1 access token from BIG-IP APM.
-    Uses the client_credentials grant for machine-to-machine auth.
+    Obtain an OAuth access token from BIG-IP APM.
+    Uses the Resource Owner Password Credentials (ROPC) grant because
+    BIG-IP APM does not support client_credentials natively.
 
-    In a full demo with a human in the loop, you'd use the
-    authorization_code grant with PKCE. For an autonomous agent,
-    client_credentials is appropriate.
+    In production, use an external IdP (Azure AD, Okta) that supports
+    client_credentials for machine-to-machine auth, with BIG-IP as the
+    resource server validating those tokens.
     """
     import httpx
 
     token_url = os.environ.get("BIGIP_TOKEN_URL", "https://bigip.lab.local/f5-oauth2/v1/token")
     client_id = os.environ.get("BIGIP_CLIENT_ID", "mcp-agent")
     client_secret = os.environ.get("BIGIP_CLIENT_SECRET", "agent-secret-2024")
+    grant_type = os.environ.get("BIGIP_GRANT_TYPE", "password")
+    username = os.environ.get("BIGIP_USERNAME", "mcp-agent")
+    password = os.environ.get("BIGIP_PASSWORD", "")
 
     print(f"[AUTH] Requesting token from {token_url}")
     print(f"[AUTH] Client ID: {client_id}")
+    print(f"[AUTH] Grant type: {grant_type}")
+
+    token_data_payload = {
+        "grant_type": grant_type,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "scope": "mcp:tools",
+    }
+
+    if grant_type == "password":
+        token_data_payload["username"] = username
+        token_data_payload["password"] = password
 
     async with httpx.AsyncClient(verify=False) as client:
         response = await client.post(
             token_url,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "scope": "mcp:tools",
-            },
+            data=token_data_payload,
         )
 
         if response.status_code == 200:
