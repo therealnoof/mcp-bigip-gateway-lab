@@ -54,26 +54,43 @@ To use a different model, change the `OLLAMA_MODEL` environment variable in
 > reaches the BIG-IP VIPs. The internal NIC (10.1.20.50) is where BIG-IP pools
 > to the MCP server. Both are required.
 
-### Persistent Interface Configuration (Netplan)
+### Persistent Interface Configuration (Systemd)
 
 In AWS EC2 with multiple ENIs, secondary interfaces come up without IP addresses.
-These must be configured persistently so they survive reboots.
+A systemd oneshot service assigns them at boot.
 
 > **Important:** Verify your interface names before applying. Run `ip -br link show`
-> on each VM to confirm which interfaces are `ens6` and `ens7`. Adjust the netplan
-> files if your interface names differ.
+> on each VM to confirm which interfaces are `ens6` and `ens7`. Adjust the
+> ExecStart line if your interface names differ.
+>
+> **Note:** Netplan does not work reliably with AWS secondary ENIs — use the
+> systemd service approach below instead.
 
 **GPU Server (10.1.1.5):**
 
+Create `/etc/systemd/system/lab-interfaces.service`:
+
+```ini
+[Unit]
+Description=Configure lab network interfaces
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c "ip addr add 10.1.10.60/24 dev ens7 2>/dev/null; ip link set ens7 up; ip addr add 10.1.20.50/24 dev ens6 2>/dev/null; ip link set ens6 up"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+> **Critical:** The `ExecStart` line must be on a single line — do not let it
+> wrap. If pasting into `vi`, use `:set paste` mode first.
+
 ```bash
-# Clone the repo if not already done
-cd /mcp-bigip-gateway-lab
-
-# Copy the netplan config
-sudo cp docs/netplan-gpu-server.yaml /etc/netplan/60-lab-interfaces.yaml
-
-# Apply (brings interfaces up immediately and persists across reboots)
-sudo netplan apply
+sudo systemctl daemon-reload
+sudo systemctl enable --now lab-interfaces.service
 
 # Verify
 ip -br addr show ens6 ens7
@@ -87,14 +104,26 @@ ens7     UP    10.1.10.60/24
 
 **HR App VM:**
 
+Create `/etc/systemd/system/lab-interfaces.service`:
+
+```ini
+[Unit]
+Description=Configure lab network interfaces
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c "ip addr add 10.1.10.50/24 dev ens7 2>/dev/null; ip link set ens7 up; ip addr add 10.1.20.60/24 dev ens6 2>/dev/null; ip link set ens6 up"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ```bash
-cd /mcp-bigip-gateway-lab
-
-# Copy the netplan config
-sudo cp docs/netplan-hr-app.yaml /etc/netplan/60-lab-interfaces.yaml
-
-# Apply
-sudo netplan apply
+sudo systemctl daemon-reload
+sudo systemctl enable --now lab-interfaces.service
 
 # Verify
 ip -br addr show ens6 ens7
@@ -102,8 +131,8 @@ ip -br addr show ens6 ens7
 
 Expected output:
 ```
-ens6     UP    10.1.10.50/24
-ens7     UP    10.1.20.60/24
+ens6     UP    10.1.20.60/24
+ens7     UP    10.1.10.50/24
 ```
 
 **Verify connectivity between the two VMs:**
@@ -115,9 +144,6 @@ ping -c 3 10.1.20.60
 # From HR App VM
 ping -c 3 10.1.20.50
 ```
-
-> **Netplan files** are included in the repo under `docs/`. If your interface names
-> differ, edit the yaml file before copying it to `/etc/netplan/`.
 
 ---
 
