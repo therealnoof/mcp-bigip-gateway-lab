@@ -21,6 +21,7 @@ Transport: Streamable HTTP (SSE) on port 8080
 import os
 import httpx
 import json
+from typing import Optional
 from mcp.server.fastmcp import FastMCP
 
 # ─────────────────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ async def call_hr_api(path: str, params: dict = None) -> dict:
 # ─────────────────────────────────────────────────────────────────
 
 @mcp.tool()
-async def list_all_employees(status: str = "") -> str:
+async def list_all_employees(status: Optional[str] = "") -> str:
     """
     List all employees in the HR system.
     Optionally filter by status (e.g., 'Active', 'On Leave').
@@ -117,10 +118,10 @@ async def get_employee_details(employee_id: str) -> str:
 
 @mcp.tool()
 async def search_employees(
-    name: str = "",
-    department: str = "",
-    clearance: str = "",
-    location: str = "",
+    name: Optional[str] = "",
+    department: Optional[str] = "",
+    clearance: Optional[str] = "",
+    location: Optional[str] = "",
 ) -> str:
     """
     Search the employee directory by one or more criteria.
