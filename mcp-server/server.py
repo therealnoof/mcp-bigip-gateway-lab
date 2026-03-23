@@ -135,7 +135,11 @@ async def search_employees(
     """
     params = {}
     if name:
-        params["name"] = name
+        # The HR API matches name against first_name and last_name separately,
+        # so "sarah chen" won't match. Use only the last word (likely last name)
+        # for more reliable matching when the LLM passes a full name.
+        name_parts = name.strip().split()
+        params["name"] = name_parts[-1] if name_parts else name
     if department:
         params["department"] = department
     if clearance:
