@@ -398,14 +398,19 @@ docker compose run --rm agent python agent.py "Which departments have the most e
 
 ### Demo 5: Specific Employee Lookup
 
-*Shows: precise tool usage with employee ID*
+*Shows: precise tool usage with search parameters*
 
 ```bash
-docker compose run --rm agent python agent.py "Tell me everything about Sarah Chen"
+docker compose run --rm agent python agent.py "Search for an employee named Sarah Chen and give me her full details"
 ```
 
-**Expected:** Agent calls `search_employees` or `get_employee_details` to pull
-Sarah Chen's full profile.
+**Expected:** Agent calls `search_employees` with `first_name=Sarah` and
+`last_name=Chen`, returns her full profile including title, clearance, and department.
+
+> **Note:** The llama3.2:3b model may occasionally pick the wrong tool or pass
+> incorrect arguments. If the query fails, rephrase to be more explicit about
+> what to search for. The 8B model has better tool-calling accuracy but requires
+> more GPU VRAM and load time.
 
 ---
 
