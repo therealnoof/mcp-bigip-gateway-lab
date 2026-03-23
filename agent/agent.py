@@ -57,7 +57,7 @@ You have access to the agency's HR system through MCP tools.
 You MUST use the provided tool functions to answer questions. Do NOT write JSON manually.
 
 Tool usage rules:
-- To find an employee by name, use search_employees with the name parameter
+- To find an employee by name, use search_employees with the name parameter — use only first OR last name, not both (e.g., name="chen" not name="sarah chen")
 - To get full details on a specific employee, first search for them, then use get_employee_details with their employee_id (format: EMP001, EMP002, etc.)
 - To list everyone, use list_all_employees
 - To see departments, use list_departments
