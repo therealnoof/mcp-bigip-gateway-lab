@@ -278,32 +278,42 @@ nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader
 
 echo ""
 echo "=== 5. Ollama Model Ready ==="
-echo "Waiting for Ollama to load model into GPU VRAM..."
+echo "Triggering model load and waiting for GPU VRAM..."
 echo "(This can take 1-3 minutes on first boot)"
 echo ""
+
+# Trigger model load in the background — Ollama only loads on first request
+curl -s -m 300 http://localhost:11434/api/generate -d '{"model":"llama3.2:3b","prompt":"hi","stream":false}' > /dev/null 2>&1 &
+CURL_PID=$!
+
 READY=0
 for i in $(seq 1 36); do
     VRAM=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1)
-    RESPONSE=$(curl -s -m 5 http://localhost:11434/api/tags 2>/dev/null)
-    RUNNING=$(curl -s -m 5 http://localhost:11434/api/ps 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('models',[])))" 2>/dev/null)
 
-    if [ "$RUNNING" = "1" ]; then
-        echo "Model loaded and running! (VRAM: ${VRAM}MiB)"
+    if [ "$VRAM" -gt 2000 ] 2>/dev/null; then
+        echo "  [$i/36] Model loading into VRAM... ${VRAM}MiB"
+    else
+        echo "  [$i/36] Waiting for model load... VRAM: ${VRAM}MiB"
+    fi
+
+    # Check if the background request completed (model is ready)
+    if ! kill -0 $CURL_PID 2>/dev/null; then
+        VRAM=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1)
+        echo ""
+        echo "Model loaded and ready! (VRAM: ${VRAM}MiB)"
         READY=1
         break
     fi
 
-    # Show progress with VRAM usage so engineer can see loading
-    echo "  [$i/36] Model loading... VRAM: ${VRAM}MiB (waiting for >4000MiB)"
     sleep 5
 done
 
 if [ "$READY" = "0" ]; then
+    kill $CURL_PID 2>/dev/null
     echo ""
-    echo "Model not ready after 3 minutes. Sending warm-up query..."
-    docker compose exec ollama ollama run llama3.2:3b "hello" --verbose 2>&1 | tail -3
-    echo ""
-    echo "If model still fails, check: docker compose logs ollama --tail 10"
+    echo "WARNING: Model not ready after 3 minutes."
+    echo "Check: docker compose logs ollama --tail 10"
+    echo "The first agent query may be slow while the model finishes loading."
 fi
 
 echo ""
