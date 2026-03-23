@@ -257,8 +257,6 @@ Run these **before every demo** to ensure all components are healthy.
 ```bash
 echo "=== 0. Start Services ==="
 cd /mcp-bigip-gateway-lab && docker compose up -d
-echo "Waiting 2 minutes for Ollama to load model into GPU..."
-sleep 120
 
 echo ""
 echo "=== 1. Network Interfaces ==="
@@ -279,8 +277,34 @@ echo "=== 4. GPU Status ==="
 nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader
 
 echo ""
-echo "=== 5. Ollama Model Loaded ==="
-docker compose exec ollama ollama list 2>/dev/null | grep llama3.2
+echo "=== 5. Ollama Model Ready ==="
+echo "Waiting for Ollama to load model into GPU VRAM..."
+echo "(This can take 1-3 minutes on first boot)"
+echo ""
+READY=0
+for i in $(seq 1 36); do
+    VRAM=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1)
+    RESPONSE=$(curl -s -m 5 http://localhost:11434/api/tags 2>/dev/null)
+    RUNNING=$(curl -s -m 5 http://localhost:11434/api/ps 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('models',[])))" 2>/dev/null)
+
+    if [ "$RUNNING" = "1" ]; then
+        echo "Model loaded and running! (VRAM: ${VRAM}MiB)"
+        READY=1
+        break
+    fi
+
+    # Show progress with VRAM usage so engineer can see loading
+    echo "  [$i/36] Model loading... VRAM: ${VRAM}MiB (waiting for >4000MiB)"
+    sleep 5
+done
+
+if [ "$READY" = "0" ]; then
+    echo ""
+    echo "Model not ready after 3 minutes. Sending warm-up query..."
+    docker compose exec ollama ollama run llama3.2:3b "hello" --verbose 2>&1 | tail -3
+    echo ""
+    echo "If model still fails, check: docker compose logs ollama --tail 10"
+fi
 
 echo ""
 echo "=== 6. MCP Server Health ==="
@@ -309,8 +333,8 @@ curl -sk https://10.1.10.100/.well-known/oauth-protected-resource | python3 -c "
 | 1. Interfaces | ens6=10.1.20.50, ens7=10.1.10.60 | `sudo systemctl restart lab-interfaces` |
 | 2. HR App | `200` | Check HR App VM: `docker start legacy-hr-app` |
 | 3. Containers | ollama, mcp-server Up | `docker compose up -d` |
-| 4. GPU | Tesla T4, ~5GB used | Check NVIDIA drivers, container GPU access |
-| 5. Model | llama3.2:3b listed | `docker compose exec ollama ollama pull llama3.2:3b` |
+| 4. GPU | Tesla T4 visible | Check NVIDIA drivers, container GPU access |
+| 5. Model | "Model loaded and running!" with VRAM >4000MiB | Wait longer, or `docker compose exec ollama ollama run llama3.2:3b "hello"` |
 | 6. MCP Server | `event: endpoint` | `docker compose restart mcp-server` |
 | 7. OAuth Token | Token type: Bearer | Check APM access policy, LocalDB user |
 | 8. MCP Gateway | Gateway: OK | Check VIP, per-request policy, iRule |
