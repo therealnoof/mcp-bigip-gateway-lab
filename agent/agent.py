@@ -144,8 +144,10 @@ async def run_agent(user_query: str):
                 {"role": "user", "content": user_query},
             ]
 
-            # Configure Ollama client
-            client = ollama.Client(host=OLLAMA_HOST)
+            # Configure Ollama client with extended timeout for cold starts
+            # First request after boot may take several minutes while the
+            # model loads into GPU VRAM on the Tesla T4
+            client = ollama.Client(host=OLLAMA_HOST, timeout=300)
 
             for iteration in range(MAX_ITERATIONS):
                 print(f"\n[AGENT] Iteration {iteration + 1}/{MAX_ITERATIONS}")
