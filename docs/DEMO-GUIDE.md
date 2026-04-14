@@ -279,21 +279,22 @@ nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader
 echo ""
 echo "=== 5. Ollama Model Ready ==="
 echo "Triggering model load and waiting for GPU VRAM..."
-echo "(This can take 1-3 minutes on first boot)"
+echo "(Tesla T4 cold-load can take 5-8 minutes on first boot)"
 echo ""
 
-# Trigger model load in the background — Ollama only loads on first request
-curl -s -m 300 http://localhost:11434/api/generate -d '{"model":"llama3.2:3b","prompt":"hi","stream":false}' > /dev/null 2>&1 &
+# Trigger model load in the background — Ollama only loads on first request.
+# keep_alive=24h pins the model in VRAM so later agent queries skip the cold load.
+curl -s -m 600 http://localhost:11434/api/generate -d '{"model":"llama3.2:3b","prompt":"hi","stream":false,"keep_alive":"24h"}' > /dev/null 2>&1 &
 CURL_PID=$!
 
 READY=0
-for i in $(seq 1 36); do
+for i in $(seq 1 120); do
     VRAM=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1)
 
     if [ "$VRAM" -gt 2000 ] 2>/dev/null; then
-        echo "  [$i/36] Model loading into VRAM... ${VRAM}MiB"
+        echo "  [$i/120] Model loading into VRAM... ${VRAM}MiB"
     else
-        echo "  [$i/36] Waiting for model load... VRAM: ${VRAM}MiB"
+        echo "  [$i/120] Waiting for model load... VRAM: ${VRAM}MiB"
     fi
 
     # Check if the background request completed (model is ready)
@@ -311,8 +312,8 @@ done
 if [ "$READY" = "0" ]; then
     kill $CURL_PID 2>/dev/null
     echo ""
-    echo "WARNING: Model not ready after 3 minutes."
-    echo "Check: docker compose logs ollama --tail 10"
+    echo "WARNING: Model not ready after 10 minutes."
+    echo "Check: docker compose logs ollama --tail 20"
     echo "The first agent query may be slow while the model finishes loading."
 fi
 
