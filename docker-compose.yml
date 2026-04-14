@@ -56,6 +56,7 @@ services:
       - ollama_data:/root/.ollama
     environment:
       - OLLAMA_LOAD_TIMEOUT=10m
+      - OLLAMA_KEEP_ALIVE=24h
     deploy:
       resources:
         reservations:
@@ -75,7 +76,9 @@ services:
         echo 'Waiting for Ollama to start...' &&
         sleep 10 &&
         ollama pull llama3.2:3b &&
-        echo 'Model pull complete!'
+        echo 'Model pull complete — warming into VRAM...' &&
+        ollama run llama3.2:3b 'hi' &&
+        echo 'Warmup complete — model resident in VRAM (OLLAMA_KEEP_ALIVE=24h).'
       "
     environment:
       - OLLAMA_HOST=http://ollama:11434
