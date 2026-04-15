@@ -1,5 +1,8 @@
 # BIG-IP APM as MCP Gateway — Demo Lab
 
+> **F5 UDF:** This lab is hosted in the internal F5 UDF environment as
+> [**MCP BIG-IP Gateway - Agent Auth**](https://udf.f5.com/d/f7b1bcf9-c55f-4f97-b378-5ba55a2ea95b#documentation).
+
 ## The Story
 
 An AI agent needs to query a **legacy HR system** that only speaks Basic Auth.
